@@ -1545,6 +1545,10 @@ int input_read_parameters(
       ppm->primordial_spec_type = external_Pk;
       flag2=_TRUE_;
     }
+    if (strcmp(string1,"higgs_dilaton_Pk") == 0) {
+      ppm->primordial_spec_type = higgs_dilaton_Pk;
+      flag2=_TRUE_;
+    }
     class_test(flag2==_FALSE_,
                errmsg,
                "could not identify primordial spectrum type, check that it is one of 'analytic_pk', 'two_scales', 'inflation_V', 'inflation_H', 'external_Pk'...");
@@ -1673,6 +1677,71 @@ int input_read_parameters(
 
     ppm->primordial_spec_type = analytic_Pk;
 
+  }
+
+  else if (ppm->primordial_spec_type == higgs_dilaton_Pk) {
+    class_call(parser_read_string(pfc,"N_star",&string1,&flag1,errmsg),
+	      errmsg,
+	      errmsg);
+
+    class_test(flag1 == _FALSE_,
+	    errmsg,
+	    "For HDM consistency relations you need to give N_star");
+
+    double N, xi;
+    int use_approx;
+    class_read_double("N_star",N);
+
+    if (pba->w0_fld > -0.99999) {
+      xi = 16.0 / 3.0 / (1.0 + pba->w0_fld) * pow(1.0 / sqrt(pba->Omega0_fld) - 0.5 * (1.0 / pba->Omega0_fld - 1.0) * log((1.0 + sqrt(pba->Omega0_fld)) / (1.0 - sqrt(pba->Omega0_fld))), 2) - 6.0;
+      xi = 1.0 / xi;
+      if(sinh(4.0*xi*N) < 1e20) {
+	use_approx = _FALSE_;
+      } else {
+	use_approx = _TRUE_;
+      }
+    } else {
+      use_approx = _TRUE_;
+    }
+
+    if (ppt->has_scalars == _TRUE_) {
+      class_call(parser_read_double(pfc,"A_s",&param1,&flag1,errmsg),
+                 errmsg,
+                 errmsg);
+      class_call(parser_read_double(pfc,"ln10^{10}A_s",&param2,&flag2,errmsg),
+                 errmsg,
+                 errmsg);
+      class_test((flag1 == _TRUE_) && (flag2 == _TRUE_),
+                 errmsg,
+                 "In input file, you cannot enter both A_s and ln10^{10}A_s, choose one");
+      if (flag1 == _TRUE_)
+        ppm->A_s = param1;
+      else if (flag2 == _TRUE_)
+        ppm->A_s = exp(param2)*1.e-10;
+
+      if (ppt->has_ad == _TRUE_) {
+
+	if (use_approx == _FALSE_) {
+	  ppm->n_s = 1.0 - 8.0 * xi / tanh(4.0 * xi * N);
+	  ppm->alpha_s = -32.0 * xi * xi / sinh(4.0 * xi * N) / sinh(4.0 * xi * N);
+	} else {
+	  // use the approximation
+	  ppm->n_s = 1.0 - 2.0 / N;
+	  ppm->alpha_s = -2.0 / N / N;
+	}
+      }
+    }
+    if (ppt->has_tensors == _TRUE_) {
+      if (use_approx == _FALSE_) {
+	ppm->r = 192.0 * xi * xi / sinh(4.0 * xi * N) / sinh(4.0 * xi * N);
+      } else {
+	ppm->r = 12.0 / N / N;
+      }
+      ppm->n_t = -ppm->r/8.*(2.-ppm->r/8.-ppm->n_s);
+      ppm->alpha_t = ppm->r/8.*(ppm->r/8.+ppm->n_s-1.);
+    }
+
+    ppm->primordial_spec_type = analytic_Pk;
   }
 
   else if (ppm->primordial_spec_type == analytic_Pk) {
@@ -2137,14 +2206,18 @@ int input_read_parameters(
     class_call(parser_read_double(pfc,"P_k_max_1/Mpc",&param2,&flag2,errmsg),
                errmsg,
                errmsg);
-    class_test((flag1 == _TRUE_) && (flag2 == _TRUE_),
-               errmsg,
-               "In input file, you cannot enter both P_k_max_h/Mpc and P_k_max_1/Mpc, choose one");
     if (flag1 == _TRUE_) {
       ppt->k_max_for_pk=param1*pba->h;
     }
     if (flag2 == _TRUE_) {
       ppt->k_max_for_pk=param2;
+    }
+    if (flag1 == _TRUE_ && flag2 == _TRUE_) {
+      if(param1*pba->h > param2) {
+	ppt->k_max_for_pk=param1*pba->h;
+      } else {
+	ppt->k_max_for_pk=param2;
+      }
     }
 
     class_call(parser_read_list_of_doubles(pfc,

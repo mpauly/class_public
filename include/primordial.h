@@ -13,6 +13,7 @@ enum primordial_spectrum_type {
   inflation_V,
   inflation_H,
   inflation_V_end,
+  higgs_dilaton_Pk,
   external_Pk
 };
 
